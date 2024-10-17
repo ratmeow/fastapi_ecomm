@@ -1,1 +1,2 @@
-Simple fastapi app with SQLAlchemy + Postgres + alembic. Just train
+Simple fastapi app with SQLAlchemy + Postgres + alembic
+Just train
