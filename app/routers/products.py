@@ -1,12 +1,10 @@
-from fastapi import APIRouter
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Annotated
 from app.backend.db_depends import get_session
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import insert, select, update
 from slugify import slugify
 from starlette import status
-from sqlalchemy.orm import Session
 from sqlalchemy.sql import and_
 
 from app.schemas import CreateProduct
@@ -17,9 +15,9 @@ router = APIRouter(prefix='/products', tags=['products'])
 
 
 @router.get('/')
-async def all_products(session: Annotated[Session, Depends(get_session)]):
-    query = select(Product).where(and_(Product.is_active, Product.stock > 0))
-    products = session.execute(query).scalars().all()
+async def all_products(session: Annotated[AsyncSession, Depends(get_session)]):
+    query = await session.execute(select(Product).where(and_(Product.is_active, Product.stock > 0)))
+    products = query.scalars().all()
     if products is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="There are no products")
 
@@ -27,7 +25,7 @@ async def all_products(session: Annotated[Session, Depends(get_session)]):
 
 
 @router.post('/create')
-async def create_product(session: Annotated[Session, Depends(get_session)], product: CreateProduct):
+async def create_product(session: Annotated[AsyncSession, Depends(get_session)], product: CreateProduct):
     query = insert(Product).values(name=product.name,
                                    slug=slugify(product.name),
                                    description=product.description,
@@ -37,8 +35,8 @@ async def create_product(session: Annotated[Session, Depends(get_session)], prod
                                    rating=0.0,
                                    category_id=product.category)
 
-    session.execute(query)
-    session.commit()
+    await session.execute(query)
+    await session.commit()
 
     return {
         'status_code': status.HTTP_201_CREATED,
@@ -47,23 +45,25 @@ async def create_product(session: Annotated[Session, Depends(get_session)], prod
 
 
 @router.get('/{category_slug}')
-async def product_by_category(category_slug: str, session: Annotated[Session, Depends(get_session)]):
-    category: Category = session.execute(select(Category).where(Category.slug == category_slug)).scalar()
+async def product_by_category(category_slug: str, session: Annotated[AsyncSession, Depends(get_session)]):
+    category = await session.scalar(select(Category).where(Category.slug == category_slug))
     if category is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
 
-    subcategories = session.execute(select(Category).where(Category.parent_id == category.id)).scalars().all()
+    subcategories_cor = await session.scalars(select(Category).where(Category.parent_id == category.id))
+    subcategories = subcategories_cor.all()
     indexes = [category.id] + [cat.id for cat in subcategories]
 
-    products = session.execute(
-        select(Product).where(and_(Product.category_id.in_(indexes), Product.stock > 0))).scalars().all()
-    return products
+    products = await session.scalars(
+        select(Product).where(and_(Product.category_id.in_(indexes), Product.stock > 0)))
+    return products.all()
 
 
 @router.get('/detail/{product_slug}')
-async def product_detail(product_slug: str, session: Annotated[Session, Depends(get_session)]):
+async def product_detail(product_slug: str, session: Annotated[AsyncSession, Depends(get_session)]):
     query = select(Product).where(Product.slug == product_slug)
-    product = session.execute(query).scalars().first()
+    product_cor = await session.scalars(query)
+    product = product_cor.first()
 
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="There are no product")
@@ -72,10 +72,11 @@ async def product_detail(product_slug: str, session: Annotated[Session, Depends(
 
 
 @router.put('/detail/{product_slug}')
-async def update_product(product_slug: str, session: Annotated[Session, Depends(get_session)],
+async def update_product(product_slug: str, session: Annotated[AsyncSession, Depends(get_session)],
                          new_product: CreateProduct):
     query = select(Product).where(Product.slug == product_slug)
-    product = session.execute(query).scalars().first()
+    product_cor = await session.scalars(query)
+    product = product_cor.first()
 
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="There are no product")
@@ -87,24 +88,25 @@ async def update_product(product_slug: str, session: Annotated[Session, Depends(
                                                                        stock=new_product.stock,
                                                                        category_id=new_product.category)
 
-    session.execute(query)
-    session.commit()
+    await session.execute(query)
+    await session.commit()
 
     return {'status_code': status.HTTP_200_OK,
             'transaction': 'Product update is successful'}
 
 
 @router.delete('/delete')
-async def delete_product(product_slug: str, session: Annotated[Session, Depends(get_session)]):
+async def delete_product(product_slug: str, session: Annotated[AsyncSession, Depends(get_session)]):
     query = select(Product).where(Product.slug == product_slug)
-    product = session.execute(query).scalars().first()
+    product_cor = await session.scalars(query)
+    product = product_cor.first()
 
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="There are no product")
 
     query = update(Product).where(Product.slug == product_slug).values(is_active=False)
-    session.execute(query)
-    session.commit()
+    await session.execute(query)
+    await session.commit()
 
     return {'status_code': status.HTTP_200_OK,
             'transaction': 'Product delete is successful'}
