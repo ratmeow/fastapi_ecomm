@@ -7,6 +7,7 @@ from slugify import slugify
 from starlette import status
 from sqlalchemy.sql import and_
 
+from app.routers.auth import get_current_user
 from app.schemas import CreateProduct
 from app.models.products import Product
 from app.models.category import Category
@@ -25,23 +26,31 @@ async def all_products(session: Annotated[AsyncSession, Depends(get_session)]):
 
 
 @router.post('/create')
-async def create_product(session: Annotated[AsyncSession, Depends(get_session)], product: CreateProduct):
-    query = insert(Product).values(name=product.name,
-                                   slug=slugify(product.name),
-                                   description=product.description,
-                                   price=product.price,
-                                   image_url=product.image_url,
-                                   stock=product.stock,
-                                   rating=0.0,
-                                   category_id=product.category)
+async def create_product(session: Annotated[AsyncSession, Depends(get_session)], product: CreateProduct,
+                         get_user: Annotated[dict, Depends(get_current_user)]):
+    if get_user.get("is_admin") or get_user.get("is_supplier"):
+        query = insert(Product).values(name=product.name,
+                                       slug=slugify(product.name),
+                                       description=product.description,
+                                       price=product.price,
+                                       image_url=product.image_url,
+                                       stock=product.stock,
+                                       rating=0.0,
+                                       category_id=product.category,
+                                       supplied_id=get_user.get("id"))
 
-    await session.execute(query)
-    await session.commit()
+        await session.execute(query)
+        await session.commit()
 
-    return {
-        'status_code': status.HTTP_201_CREATED,
-        'transaction': 'Successful'
-    }
+        return {
+            'status_code': status.HTTP_201_CREATED,
+            'transaction': 'Successful'
+        }
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='You are not authorized to use this method'
+        )
 
 
 @router.get('/{category_slug}')
@@ -73,40 +82,54 @@ async def product_detail(product_slug: str, session: Annotated[AsyncSession, Dep
 
 @router.put('/detail/{product_slug}')
 async def update_product(product_slug: str, session: Annotated[AsyncSession, Depends(get_session)],
-                         new_product: CreateProduct):
-    query = select(Product).where(Product.slug == product_slug)
-    product_cor = await session.scalars(query)
-    product = product_cor.first()
+                         new_product: CreateProduct,
+                         get_user: Annotated[dict, Depends(get_current_user)]):
+    if get_user.get("is_admin") or get_user.get("is_supplier"):
+        query = select(Product).where(Product.slug == product_slug)
+        product_cor = await session.scalars(query)
+        product = product_cor.first()
 
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="There are no product")
+        if product is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="There are no product")
 
-    query = update(Product).where(Product.slug == product_slug).values(name=new_product.name,
-                                                                       description=new_product.description,
-                                                                       price=new_product.price,
-                                                                       image_url=new_product.image_url,
-                                                                       stock=new_product.stock,
-                                                                       category_id=new_product.category)
+        query = update(Product).where(Product.slug == product_slug).values(name=new_product.name,
+                                                                           description=new_product.description,
+                                                                           price=new_product.price,
+                                                                           image_url=new_product.image_url,
+                                                                           stock=new_product.stock,
+                                                                           category_id=new_product.category)
 
-    await session.execute(query)
-    await session.commit()
+        await session.execute(query)
+        await session.commit()
 
-    return {'status_code': status.HTTP_200_OK,
-            'transaction': 'Product update is successful'}
+        return {'status_code': status.HTTP_200_OK,
+                'transaction': 'Product update is successful'}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='You are not authorized to use this method'
+        )
 
 
 @router.delete('/delete')
-async def delete_product(product_slug: str, session: Annotated[AsyncSession, Depends(get_session)]):
-    query = select(Product).where(Product.slug == product_slug)
-    product_cor = await session.scalars(query)
-    product = product_cor.first()
+async def delete_product(product_slug: str, session: Annotated[AsyncSession, Depends(get_session)],
+                         get_user: Annotated[dict, Depends(get_current_user)]):
+    if get_user.get("is_admin") or get_user.get("is_supplier"):
+        query = select(Product).where(Product.slug == product_slug)
+        product_cor = await session.scalars(query)
+        product = product_cor.first()
 
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="There are no product")
+        if product is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="There are no product")
 
-    query = update(Product).where(Product.slug == product_slug).values(is_active=False)
-    await session.execute(query)
-    await session.commit()
+        query = update(Product).where(Product.slug == product_slug).values(is_active=False)
+        await session.execute(query)
+        await session.commit()
 
-    return {'status_code': status.HTTP_200_OK,
-            'transaction': 'Product delete is successful'}
+        return {'status_code': status.HTTP_200_OK,
+                'transaction': 'Product delete is successful'}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='You are not authorized to use this method'
+        )

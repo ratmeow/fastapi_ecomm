@@ -12,8 +12,8 @@ class AppSettings(BaseSettings):
     PG_DB: str = Field(validation_alias="POSTGRES_DB")
     PG_URL: str = ""
 
-    # JWT_KEY: str
-    # JWT_ALGORITHM: str
+    JWT_KEY: str
+    JWT_ALGORITHM: str
 
     class Config:
         env_file = ".env"

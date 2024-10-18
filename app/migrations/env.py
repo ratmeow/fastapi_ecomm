@@ -9,6 +9,7 @@ from app.backend.db import Base
 from app.backend.config import settings
 from app.models.category import Category
 from app.models.products import Product
+from app.models.user import User
 
 from alembic import context
 
